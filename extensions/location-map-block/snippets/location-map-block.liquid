@@ -1,0 +1,12 @@
+<div
+  class="location-map-block"
+  data-title="{{ block.settings.title }}"
+>
+  <h2>{{ block.settings.title }}</h2>
+  <div id="locations-list-{{ block.id }}">
+    <!-- Locations will be loaded here -->
+  </div>
+</div>
+
+<link rel="stylesheet" href="{{ 'location-map-block.css' | asset_url }}">
+<script src="{{ 'location-map-block.js' | asset_url }}" defer></script>

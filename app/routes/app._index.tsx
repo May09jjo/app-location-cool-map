@@ -90,10 +90,20 @@ export default function Index() {
           const modal = document.getElementById('location-modal') as HTMLElement & { hide?: () => void };
           if (modal && typeof modal.hide === 'function') {
             modal.hide();
+          } else {
+            // Fallback: try removing open attribute
+            const modalElement = document.getElementById('location-modal');
+            if (modalElement) {
+              modalElement.removeAttribute('open');
+            }
           }
           resetForm();
+          // Reload the page to show the new location
+          window.location.reload();
         } else if ('id' in fetcher.data) {
           shopify.toast.show("Location deleted successfully");
+          // Reload to update the list
+          window.location.reload();
         }
       } else if ('error' in fetcher.data) {
         shopify.toast.show(fetcher.data.error || "An error occurred", { isError: true });
@@ -135,7 +145,21 @@ export default function Index() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: Event) => {
+    // Prevent default if called from button click
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // Prevent double submission
+    if (isLoading) {
+      console.log("Already submitting, ignoring duplicate request");
+      return;
+    }
+
+    console.log("Submitting form with data:", formData);
+    
     const formDataToSubmit = new FormData();
     Object.entries(formData).forEach(([key, value]) => {
       if (value) formDataToSubmit.append(key, value);
@@ -405,7 +429,8 @@ export default function Index() {
         <s-button
           slot="primary-action"
           variant="primary"
-          onClick={handleSubmit}
+          onClick={(event: Event) => handleSubmit(event)}
+          disabled={isLoading}
           {...(isLoading ? { loading: true } : {})}
         >
           {editingLocation ? "Update Location" : "Add Location"}

@@ -1,0 +1,10 @@
+name = "Location Map Block"
+uid = "1929a578-5bc0-523f-9857-5d8eb7f9466729ff4323"
+type = "theme_app_extension"
+
+[settings]
+  [[settings.fields]]
+    type = "text"
+    id = "title"
+    label = "Block Title"
+    default = "Our Locations"

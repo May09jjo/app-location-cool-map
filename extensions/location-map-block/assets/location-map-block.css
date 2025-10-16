@@ -1,0 +1,4 @@
+.location-map-block { padding: 16px; border: 1px solid #e1e3e5; border-radius: 8px; background: #fff; }
+.location-map-block h2 { margin-top: 0; font-size: 1.25rem; }
+.location-map-block ul { list-style: none; padding-left: 0; }
+.location-map-block li { margin-bottom: 12px; }
