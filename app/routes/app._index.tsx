@@ -1,249 +1,355 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import {
+  getLocationsByShop,
+  createLocation,
+  deleteLocation,
+  type Location,
+} from "../models/Location.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-
-  return null;
+  const { session } = await authenticate.admin(request);
+  const locations = await getLocationsByShop(session.shop);
+  return { locations };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const method = request.method;
 
-  const product = responseJson.data!.productCreate!.product!;
-  const variantId = product.variants.edges[0]!.node!.id!;
+  if (method === "POST") {
+    const result = await createLocation({
+      shop: session.shop,
+      name: formData.get("name") as string,
+      address: formData.get("address") as string,
+      city: formData.get("city") as string,
+      country: formData.get("country") as string,
+      zipCode: formData.get("zipCode") as string,
+      phone: formData.get("phone") as string,
+    });
 
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
-      }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
-  );
+    return result;
+  }
 
-  const variantResponseJson = await variantResponse.json();
+  if (method === "DELETE") {
+    const id = Number(formData.get("id"));
+    const result = await deleteLocation(id);
+    return result;
+  }
 
-  return {
-    product: responseJson!.data!.productCreate!.product,
-    variant:
-      variantResponseJson!.data!.productVariantsBulkUpdate!.productVariants,
-  };
+  return { success: false, error: "Method not allowed" };
 };
 
 export default function Index() {
+  const { locations: initialLocations } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
-
   const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+  
+  const [showModal, setShowModal] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    address: "",
+    city: "",
+    country: "",
+    zipCode: "",
+    phone: "",
+  });
+
+  // Merge fetcher data with initial locations
+  const locations = fetcher.data && 'location' in fetcher.data && fetcher.data.success
+    ? [...initialLocations, fetcher.data.location]
+    : initialLocations;
+
+  const isLoading = ["loading", "submitting"].includes(fetcher.state);
 
   useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
+    if (fetcher.data && 'success' in fetcher.data) {
+      if (fetcher.data.success) {
+        if ('location' in fetcher.data) {
+          shopify.toast.show("Location saved successfully");
+          setShowModal(false);
+          resetForm();
+        } else if ('id' in fetcher.data) {
+          shopify.toast.show("Location deleted successfully");
+        }
+      } else if ('error' in fetcher.data) {
+        shopify.toast.show(fetcher.data.error || "An error occurred", { isError: true });
+      }
     }
-  }, [fetcher.data?.product?.id, shopify]);
+  }, [fetcher.data, shopify]);
 
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      address: "",
+      city: "",
+      country: "",
+      zipCode: "",
+      phone: "",
+    });
+    setEditingLocation(null);
+  };
+
+  const handleOpenModal = (location?: Location) => {
+    console.log("handleOpenModal called", { location, showModal });
+    if (location) {
+      setEditingLocation(location);
+      setFormData({
+        name: location.name,
+        address: location.address,
+        city: location.city,
+        country: location.country,
+        zipCode: location.zipCode || "",
+        phone: location.phone || "",
+      });
+    } else {
+      resetForm();
+    }
+    setShowModal(true);
+    console.log("Modal should now be visible");
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    resetForm();
+  };
+
+  const handleSubmit = () => {
+    const formDataToSubmit = new FormData();
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value) formDataToSubmit.append(key, value);
+    });
+    
+    fetcher.submit(formDataToSubmit, { method: "POST" });
+  };
+
+  const handleDelete = (id: number) => {
+    if (confirm("Are you sure you want to delete this location?")) {
+      const formDataToSubmit = new FormData();
+      formDataToSubmit.append("id", id.toString());
+      fetcher.submit(formDataToSubmit, { method: "DELETE" });
+    }
+  };
+
+  console.log("Rendering Index component", { showModal, locationsCount: locations.length });
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
+    <s-page heading="Location Manager">
+      <s-button
+        slot="primary-action"
+        variant="primary"
+        onClick={() => {
+          console.log("Primary action button clicked");
+          handleOpenModal();
+        }}
+      >
+        Add Location
       </s-button>
 
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
+      <s-section heading="Manage Your Store Locations">
         <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
-          >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
+          Add, edit, and manage your store locations. Each location includes address details
+          and geographic coordinates automatically generated through geocoding.
         </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references.
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
-            >
-              Edit product
-            </s-button>
-          )}
-        </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
 
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
+        {locations && locations.length > 0 ? (
+          <s-box borderWidth="base" borderRadius="base">
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e1e3e5" }}>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Name</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Address</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>City</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Country</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Phone</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Coordinates</th>
+                  <th style={{ padding: "12px", textAlign: "left" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {locations.map((location) => {
+                  if (!location) return null;
+                  return (
+                    <tr key={location.id} style={{ borderBottom: "1px solid #e1e3e5" }}>
+                      <td style={{ padding: "12px" }}>
+                        <strong>{location.name}</strong>
+                      </td>
+                      <td style={{ padding: "12px" }}>{location.address}</td>
+                      <td style={{ padding: "12px" }}>{location.city}</td>
+                      <td style={{ padding: "12px" }}>{location.country}</td>
+                      <td style={{ padding: "12px" }}>{location.phone || "-"}</td>
+                      <td style={{ padding: "12px", color: "#6d7175" }}>
+                        {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+                      </td>
+                      <td style={{ padding: "12px" }}>
+                        <s-button
+                          variant="tertiary"
+                          onClick={() => handleDelete(location.id)}
+                        >
+                          Delete
+                        </s-button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </s-box>
+        ) : (
+          <s-box padding="large">
+            <s-stack direction="block" gap="base">
+              <s-heading>No locations yet</s-heading>
+              <s-paragraph>
+                Add your first location to get started with location management.
+              </s-paragraph>
+              <s-button
+                variant="primary"
+                onClick={() => {
+                  console.log("Empty state button clicked");
+                  handleOpenModal();
+                }}
               >
-                <pre style={{ margin: 0 }}>
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
+                Add Location
+              </s-button>
             </s-stack>
-          </s-section>
+          </s-box>
         )}
       </s-section>
 
-      <s-section slot="aside" heading="App template specs">
+      {showModal && (
+        <>
+          {console.log("Rendering modal", { showModal })}
+          <s-modal
+            heading={editingLocation ? "Edit Location" : "Add New Location"}
+          >
+          <s-stack direction="block" gap="base">
+            <s-text-field
+              label="Location Name"
+              value={formData.name}
+              onInput={(e: Event) =>
+                setFormData({ ...formData, name: (e.target as HTMLInputElement).value })
+              }
+              required
+            />
+            
+            <s-text-field
+              label="Address"
+              value={formData.address}
+              onInput={(e: Event) =>
+                setFormData({ ...formData, address: (e.target as HTMLInputElement).value })
+              }
+              required
+            />
+            
+            <s-stack direction="inline" gap="base">
+              <s-text-field
+                label="City"
+                value={formData.city}
+                onInput={(e: Event) =>
+                  setFormData({ ...formData, city: (e.target as HTMLInputElement).value })
+                }
+                required
+              />
+              
+              <s-text-field
+                label="Country"
+                value={formData.country}
+                onInput={(e: Event) =>
+                  setFormData({ ...formData, country: (e.target as HTMLInputElement).value })
+                }
+                required
+              />
+            </s-stack>
+            
+            <s-stack direction="inline" gap="base">
+              <s-text-field
+                label="Zip Code"
+                value={formData.zipCode}
+                onInput={(e: Event) =>
+                  setFormData({ ...formData, zipCode: (e.target as HTMLInputElement).value })
+                }
+              />
+              
+              <s-text-field
+                label="Phone"
+                value={formData.phone}
+                onInput={(e: Event) =>
+                  setFormData({ ...formData, phone: (e.target as HTMLInputElement).value })
+                }
+              />
+            </s-stack>
+          </s-stack>
+
+          <s-stack slot="footer" direction="inline" gap="base">
+            <s-button onClick={handleCloseModal}>Cancel</s-button>
+            <s-button
+              variant="primary"
+              onClick={handleSubmit}
+              {...(isLoading ? { loading: true } : {})}
+            >
+              {editingLocation ? "Update Location" : "Add Location"}
+            </s-button>
+          </s-stack>
+          </s-modal>
+        </>
+      )}
+
+      <s-section slot="aside" heading="About Location Manager">
         <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
+          This dashboard allows you to manage all your store locations in one place.
+          Locations are automatically geocoded using OpenStreetMap to provide accurate coordinates for mapping.
+        </s-paragraph>
+        
+        <s-stack direction="block" gap="base">
+          <s-box
+            padding="base"
+            borderWidth="base"
+            borderRadius="base"
+            background="subdued"
+          >
+            <s-stack direction="block" gap="base">
+              <strong>Features:</strong>
+              <s-unordered-list>
+                <s-list-item>Add new locations with address details</s-list-item>
+                <s-list-item>Automatic geocoding for coordinates</s-list-item>
+                <s-list-item>View all locations in a data table</s-list-item>
+                <s-list-item>Delete locations as needed</s-list-item>
+              </s-unordered-list>
+            </s-stack>
+          </s-box>
+        </s-stack>
+      </s-section>
+
+      <s-section slot="aside" heading="Technical Details">
+        <s-paragraph>
+          <s-text>Database: </s-text>
+          <s-link href="https://www.prisma.io/" target="_blank">
+            Prisma with SQLite
           </s-link>
         </s-paragraph>
         <s-paragraph>
-          <s-text>Interface: </s-text>
+          <s-text>Geocoding: </s-text>
+          <s-text>OpenStreetMap Nominatim API</s-text>
+        </s-paragraph>
+        <s-paragraph>
+          <s-text>Components: </s-text>
           <s-link
             href="https://shopify.dev/docs/api/app-home/using-polaris-components"
             target="_blank"
           >
-            Polaris web components
+            Polaris Web Components
           </s-link>
         </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
-        </s-paragraph>
-      </s-section>
-
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
       </s-section>
     </s-page>
   );
