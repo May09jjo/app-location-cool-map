@@ -24,6 +24,9 @@ export type CreateLocationInput = {
   country: string;
   zipCode?: string;
   phone?: string;
+  latitude?: number;
+  longitude?: number;
+  useManualCoordinates?: boolean;
 };
 
 export type UpdateLocationInput = {
@@ -63,22 +66,57 @@ export async function createLocation(
 ): Promise<{ success: true; location: Location } | { success: false; error: string }> {
   try {
     // Validate required fields
-    if (!input.name || !input.address || !input.city || !input.country) {
+    if (!input.name) {
       return {
         success: false,
-        error: "Name, address, city, and country are required fields.",
+        error: "Location name is required.",
       };
     }
 
-    // Construct full address for geocoding
-    const fullAddress = `${input.address}, ${input.city}, ${input.country}`;
-    const coordinates = await geocodeAddress(fullAddress);
+    let latitude: number;
+    let longitude: number;
 
-    if (!coordinates) {
-      return {
-        success: false,
-        error: "Could not find coordinates for the address. Please verify the address is correct.",
-      };
+    // Check if using manual coordinates
+    if (input.useManualCoordinates && input.latitude !== undefined && input.longitude !== undefined) {
+      // Use manually provided coordinates
+      latitude = input.latitude;
+      longitude = input.longitude;
+
+      // Validate coordinates
+      if (latitude < -90 || latitude > 90) {
+        return {
+          success: false,
+          error: "Latitude must be between -90 and 90.",
+        };
+      }
+      if (longitude < -180 || longitude > 180) {
+        return {
+          success: false,
+          error: "Longitude must be between -180 and 180.",
+        };
+      }
+    } else {
+      // Use automatic geocoding
+      if (!input.address || !input.city || !input.country) {
+        return {
+          success: false,
+          error: "Address, city, and country are required for automatic geocoding.",
+        };
+      }
+
+      // Construct full address for geocoding
+      const fullAddress = `${input.address}, ${input.city}, ${input.country}`;
+      const coordinates = await geocodeAddress(fullAddress);
+
+      if (!coordinates) {
+        return {
+          success: false,
+          error: "Could not find coordinates for the address. Try entering coordinates manually.",
+        };
+      }
+
+      latitude = coordinates.latitude;
+      longitude = coordinates.longitude;
     }
 
     // Create the location
@@ -86,13 +124,13 @@ export async function createLocation(
       data: {
         shop: input.shop,
         name: input.name,
-        address: input.address,
-        city: input.city,
-        country: input.country,
+        address: input.address || "",
+        city: input.city || "",
+        country: input.country || "",
         zipCode: input.zipCode || null,
         phone: input.phone || null,
-        latitude: coordinates.latitude,
-        longitude: coordinates.longitude,
+        latitude,
+        longitude,
       },
     });
 
