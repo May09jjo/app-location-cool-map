@@ -4,6 +4,26 @@ import { getLocationsByShop, type Location } from "../models/Location.server";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const isJson = url.pathname.endsWith(".json") || request.headers.get("accept")?.includes("application/json");
+
+  // If the request asks for JSON, allow fetching by shop query param (used by the storefront block)
+  if (isJson) {
+    const shop = url.searchParams.get("shop");
+    if (!shop) {
+      return new Response(JSON.stringify({ error: "shop param required" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const locations = await getLocationsByShop(shop);
+    return new Response(JSON.stringify({ locations }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // Default admin-protected page rendering
   const { session } = await authenticate.admin(request);
   const locations = await getLocationsByShop(session.shop);
   return { locations };

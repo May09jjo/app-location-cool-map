@@ -1,4 +1,29 @@
-{% render 'location-map-block' %}
+
+
+{{ 'leaflet.css' | asset_url |  stylesheet_tag }}
+{{ 'location-map-block.css' | asset_url | stylesheet_tag }}
+
+<div class="location-map-block" data-title="{{ block.settings.title }}">
+  <h2 class="location-block-title">{{ block.settings.title }}</h2>
+
+  <div class="location-map-grid">
+    <div class="location-map-column location-map-left">
+      <div id="map-{{ block.id }}" class="location-map-canvas" aria-hidden="false"></div>
+    </div>
+
+    <div class="location-map-column location-map-right">
+      <div class="location-filter">
+        <input id="location-filter-{{ block.id }}" type="search" placeholder="Filter locations (name, city, country)" aria-label="Filter locations" />
+      </div>
+      <div id="locations-list-{{ block.id }}" class="locations-list">
+        <!-- Locations will be loaded here -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ 'leaflet.js' | asset_url }}" defer></script>
+<script src="{{ 'location-map-block.js' | asset_url }}" defer></script>
 
 {% schema %}
 {

@@ -1,4 +1,15 @@
-.location-map-block { padding: 16px; border: 1px solid #e1e3e5; border-radius: 8px; background: #fff; }
-.location-map-block h2 { margin-top: 0; font-size: 1.25rem; }
-.location-map-block ul { list-style: none; padding-left: 0; }
-.location-map-block li { margin-bottom: 12px; }
+.location-map-block { padding: 12px; border: 1px solid #e1e3e5; border-radius: 8px; background: #fff; }
+.location-block-title { margin: 0 0 12px 0; font-size: 1.125rem; }
+.location-map-grid { display: flex; gap: 12px; align-items: stretch; }
+.location-map-column { flex: 1 1 0; min-width: 0; }
+.location-map-left { flex: 2 1 60%; }
+.location-map-right { flex: 1 1 40%; max-width: 480px; }
+.location-map-canvas { width: 100%; height: 420px; border-radius: 6px; overflow: hidden; }
+.location-filter { margin-bottom: 8px; }
+.location-filter input { width: 100%; padding: 8px; border: 1px solid #dfe4e8; border-radius: 6px; }
+.locations-list-root { display: flex; flex-direction: column; gap: 8px; }
+.location-item { padding: 10px; border-radius: 6px; border: 1px solid #eef1f3; background: #fff; cursor: pointer; }
+.location-item.active { background: #f4fbff; border-color: #cfeefb; }
+.location-item-title { font-weight: 600; }
+.location-item-address { font-size: 0.95rem; color: #586069; }
+.location-item-meta { font-size: 0.85rem; color: #6b7781; }

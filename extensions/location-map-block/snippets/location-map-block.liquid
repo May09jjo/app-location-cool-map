@@ -1,12 +1,25 @@
-<div
-  class="location-map-block"
-  data-title="{{ block.settings.title }}"
->
-  <h2>{{ block.settings.title }}</h2>
-  <div id="locations-list-{{ block.id }}">
-    <!-- Locations will be loaded here -->
-  </div>
-</div>
+<div class="location-map-block" data-shop="{{ shop.myshopify_domain }}" data-title="{{ block.settings.title }}">
+    <h2 class="location-block-title">{{ block.settings.title }}</h2>
 
-<link rel="stylesheet" href="{{ 'location-map-block.css' | asset_url }}">
-<script src="{{ 'location-map-block.js' | asset_url }}" defer></script>
+    <div class="location-map-grid">
+        <div class="location-map-column location-map-left">
+            <div id="map-{{ block.id }}" class="location-map-canvas" aria-hidden="false"></div>
+        </div>
+
+        <div class="location-map-column location-map-right">
+            <div class="location-filter">
+                <input id="location-filter-{{ block.id }}" type="search" placeholder="Filter locations (name, city, country)" aria-label="Filter locations" />
+            </div>
+            <div id="locations-list-{{ block.id }}" class="locations-list">
+                <!-- Locations will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Local Leaflet assets (uploaded to extension assets) -->
+    <link rel="stylesheet" href="{{ 'leaflet.css' | asset_url }}">
+    <script src="{{ 'leaflet.js' | asset_url }}" defer></script>
+
+    <link rel="stylesheet" href="{{ 'location-map-block.css' | asset_url }}">
+    <script src="{{ 'location-map-block.js' | asset_url }}" defer></script>
+</div>
